@@ -1,92 +1,127 @@
 # Tankpreise - Fuel Price Tracking & Visualization
 
-A diesel/gas price tracking and visualization project that pulls data from the Tankerkönig API and creates visual analysis of price trends.
+A personal diesel/E5/E10 price tracking project for a handful of gas stations
+near Ludgeri/Steinfurt/Wentorf. Price history comes from a local clone of the
+public [tankerkoenig-data](https://github.com/tankerkoenig/tankerkoenig-data)
+repository (community-donated dumps of the Tankerkönig API); the scripts in
+`src2/` pull the relevant rows out of that dataset and chart daily/intraday
+price patterns to spot good refueling windows.
 
 ## Project Structure
 
 ```
 Tankpreise/
-├── src/                        # Active source code
-│   ├── 1_extract.py           # Extract gas station data from Tankerkönig dataset
-│   └── 2_visualize.py         # Visualize price trends (90-day view, 09:00-22:00)
+├── src2/                        # Active source code
+│   ├── extract.py                        # Pull one station's rows out of the cloned dataset
+│   ├── visualize_myData.py               # Single-fuel chart, ~14 days, intraday detail
+│   ├── visualize_myData_longterm.py      # Same, but a long window (148 days), thinned labels
+│   └── visualise_tankerData_fuel_type.py # Chart a single dated raw extract, fuel type via CLI arg
 │
 ├── data/
-│   ├── raw/                   # Raw extracted station data
-│   ├── processed/             # Cleaned/processed datasets
-│   └── archive/               # Old/test data files
+│   ├── raw/                   # Per-station extracts from extract.py (gitignored, .gitkeep only)
+│   ├── processed/             # Consolidated per-fuel CSVs consumed by visualize_myData*.py (gitignored)
+│   └── archive/               # Old/test data files (gitignored)
 │
-├── scripts/                    # Utility batch scripts
-│   ├── repo_clone.bat         # Clone Tankerkönig repository
-│   └── file_clone.bat         # File operations
+├── scripts/                    # Windows batch helpers
+│   ├── repo_clone.bat         # git pull the tankerkoenig-data repo (hardcoded local path)
+│   └── file_clone.bat         # Check out a single day's file from tankerkoenig-data
 │
-├── output/                     # Generated charts and reports
+├── output/                     # Generated charts (gitignored)
 │
-├── legacy/                     # Historical development files
-│   ├── visualizations/        # Previous visualization iterations
-│   └── utilities/             # Old utility scripts
+├── legacy/                     # Superseded development iterations, kept for reference
+│   ├── src/, visualizations/  # Earlier versions of the extract/visualize scripts
+│   └── utilities/             # Includes two standalone live-polling scripts that call the
+│                               # Tankerkönig API directly (see "Live polling" below)
 │
-└── docs/                       # Documentation
-    └── projectstructure.md    # Detailed project analysis
-
+├── docs/
+│   └── projectstructure.md    # Older structure writeup — describes a previous src/ layout,
+│                               # now stale; see this README instead
+│
+└── pyproject.toml              # Project metadata & dependencies (pandas, matplotlib)
 ```
 
-## Quick Start
+## Setup
 
-### 1. Update Data Source
+- Python ≥ 3.10 (`.venv/` in this repo, dependencies declared in `pyproject.toml`).
+- Clone `tankerkoenig-data` as a **sibling** of this repo (the scripts reference it via
+  `../../tankerkoenig-data`), then keep it updated with `scripts/repo_clone.bat`
+  (edit the hardcoded path inside first) or a plain `git pull`.
+- `TANKERKOENIG_API_KEY` is **only** needed for the legacy live-polling scripts
+  (see below) — the current `src2/` pipeline reads from the cloned dataset and
+  doesn't call the live API, so it needs no key.
+
+## Workflow
+
+### 1. Update the data source
 ```bash
-cd tankerkoenig-data
+cd ../tankerkoenig-data
 git pull
 ```
+or run `scripts/repo_clone.bat`.
 
-### 2. Extract Station Data
+### 2. Extract station data
 ```bash
-cd src
-python 1_extract.py
+cd src2
+python extract.py
 ```
-Edit station UUID and output filename as needed. Outputs to `data/raw/`.
+Edit `STATION_NAME` (and `MONTHS_TO_PROCESS`) at the top of the file to pick the
+station and lookback window. Outputs a comma-separated CSV to `data/raw/`.
 
-### 3. Visualize Prices
+### 3. Consolidate into `data/processed/` (manual step, no script yet)
+`visualize_myData.py` / `visualize_myData_longterm.py` expect semicolon-separated
+files at `data/processed/{diesel,e5,e10}_prices_*.csv` with columns
+`date;<fuel>;station`. There's currently no committed script that builds these
+from the `data/raw/` extracts — they've been assembled by hand so far. This is
+the main gap in the pipeline (see Known Gaps below).
+
+### 4. Visualize
 ```bash
-cd src
-python 2_visualize.py
+cd src2
+python visualize_myData.py              # last SHOW_DAYS (default 14), one fuel/station, intraday detail
+python visualize_myData_longterm.py     # long window (default 148 days), thinned x-axis
+python visualise_tankerData_fuel_type.py [diesel|e5|e10]   # one dated data/raw/ file, single day snapshot
 ```
-Uses `data/processed/diesel_prices_3.csv` (semicolon-separated).
-Shows as many days as desired, 09:00-22:00 window with daily minimums and intraday price curves.
-
-## Configuration
-
-### Station IDs (in 1_extract.py)
-- `Tanke_Lud`: 916d61b6-7279-4d63-a754-ae160f8cdee2
-- `Tanke_Steinf`: 291fafe3-dbfb-4452-8c68-aa6a7540ce98
-- `Wentorf_Hem`: e1a15081-2543-9107-e040-0b0a3dfe563c
-
-### Visualization Settings (in 2_visualize.py)
-- `DATA_FILE`: Path to processed CSV file
-- `MAX_GAP_MINUTES`: 800 (max gap between identical prices)
-- `show_days`: 90 (number of days to display)
-- `SEPERATOR`: ';' (CSV delimiter)
+Fuel type, station, and date range are set as constants near the top of each
+file (`FUEL_TYPE`, `STATION`, `SHOW_DAYS`, `Gasstation`, `Datum`, ...).
 
 ## Features
 
-- **Smart Time Handling**: Shifts nighttime prices (before 08:00 or after 22:01) to next day at 09:00
-- **Daily Minimums**: Bar chart showing lowest price each day
-- **Intraday Trends**: Step plots overlay showing price changes throughout the day
-- **Interval Grouping**: Groups consecutive timestamps with same price
-- **Time Window**: Focuses on 09:00-22:00 shopping hours
+- **Smart time handling**: shifts late-night entries (≥21:40) to 00:01 next day
+  and early-morning entries (<08:00/09:00) to 09:00, so overnight carryover
+  prices don't distort the business-hours view.
+- **Stable-minimum detection**: alongside the absolute daily low, finds the
+  cheapest price that held for ≥30 minutes — more actionable than a price that
+  flashed by for a minute.
+- **Multi-station support**: `data/processed/` CSVs carry a `station` column so
+  several stations' history can live in the same file.
+- **Missing-day indicators**: days with no data are marked with gray ✕ markers
+  instead of silently disappearing from the x-axis.
 
-## Data Sources
+## Live polling (legacy, needs `TANKERKOENIG_API_KEY`)
 
-- **Tankerkönig API**: Raw price data from `tankerkoenig-data/prices/YYYY/MM/` directory
-- **Processed Files**: Semicolon-separated CSV with format: `date;diesel`
-  - Example: `2025-06-20 11:07:00;1.559`
+`legacy/utilities/gas_price.py` and `gas_price_datetime.py` poll the live
+Tankerkönig API directly (`creativecommons.tankerkoenig.de/json/prices.php`)
+and append the current price to a CSV — this is where `TANKERKOENIG_API_KEY`
+is actually read (`os.environ.get('TANKERKOENIG_API_KEY')`). These aren't part
+of the current `src2/` pipeline; they'd need to be run on a schedule (e.g. a
+Task Scheduler job) to build up history independently of the
+`tankerkoenig-data` repo.
+
+## Known Gaps / TODO
+
+- No script to turn `data/raw/` extracts into the `data/processed/` files the
+  visualizers expect — currently a manual step.
+- The `STATIONS` UUID dict is duplicated between `extract.py` and
+  `visualise_tankerData_fuel_type.py`; worth factoring out.
+- `visualise_tankerData_fuel_type.py`'s `STATIONS["Orlen_Wentorf"]` UUID has
+  stray characters (`0050´ßoicxäiuzt56ba-...`) — looks like an accidental edit,
+  not a real UUID.
+- `docs/projectstructure.md` describes an older `src/` layout and is stale;
+  either update it to match `src2/` or remove it in favor of this README.
 
 ## Dependencies
 
 - pandas
 - matplotlib
 
-## Notes
-
-- The project uses relative paths from the `src/` directory
-- Legacy files contain development iterations and are kept for reference
-- All output should go to the `output/` directory
+(see `pyproject.toml` for pinned minimum versions)
