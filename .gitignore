@@ -51,8 +51,5 @@ data/log/*.csv
 .ipynb_checkpoints/
 *.ipynb
 
-# Claude Code local settings (machine/user-specific, not shared)
-.claude/settings.local.json
-
 # Data archives (keep structure, ignore content)
 data/archive/*.csv
