@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project specific
+output/*.png
+output/*.pdf
+output/*.jpg
+data/raw/*.csv
+data/processed/*.csv
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/archive/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Claude Code local settings (machine/user-specific, not shared)
+.claude/settings.local.json
+
+# Data archives (keep structure, ignore content)
+data/archive/*.csv
