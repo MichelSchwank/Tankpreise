@@ -11,22 +11,12 @@ from typing import List, Tuple
 from datetime import datetime, timedelta
 import pandas as pd
 
+from stations import STATIONS
 
     # Configuration
 STATION_NAME = "Tanke_Lud"  # Change this to extract different stations
 MONTHS_TO_PROCESS = 1  # Look back up to 2 months
 # be patient, this can take 30s-100s
-
-# Gas Station UUIDs
-STATIONS = {
-    "Tanke_Lud": "916d61b6-7279-4d63-a754-ae160f8cdee2",
-    "Tanke_Steinf": "291fafe3-dbfb-4452-8c68-aa6a7540ce98",
-    "Wentorf_Hem": "e1a15081-2543-9107-e040-0b0a3dfe563c",
-    "MrWash": "21d8e11f-5712-4d00-81aa-100887b65699",
-    "EDEKA_Wentorf": "2f432c0c-9052-466d-9030-c78ab8c4149d",
-    "München": "fb79c457-543a-4ff6-ba70-cd270ac2110a",
-    "Orlen_Wentorf": "005056ba-7cb6-1ed2-bceb-bbb7e74e0d4e",
-}
 
 
 class TankDataExtractor:
@@ -145,7 +135,7 @@ class TankDataExtractor:
 
         if output_path is None:
             today = datetime.now().strftime("%Y_%m_%d")
-            output_path = self.script_dir / f'../data/raw/{today}_{self.station_name}.csv'
+            output_path = self.script_dir / f'../data/import/{today}_{self.station_name}.csv'
 
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)

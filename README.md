@@ -1,25 +1,34 @@
 # Tankpreise - Fuel Price Tracking & Visualization
 
 A personal diesel/E5/E10 price tracking project for a handful of gas stations
-near Ludgeri/Steinfurt/Wentorf. Price history comes from a local clone of the
-public [tankerkoenig-data](https://github.com/tankerkoenig/tankerkoenig-data)
-repository (community-donated dumps of the Tankerkönig API); the scripts in
-`src2/` pull the relevant rows out of that dataset and chart daily/intraday
-price patterns to spot good refueling windows.
+near Ludgeri/Steinfurt/Wentorf. Two independent sources feed it:
+
+1. **Live polling** — `src2/record_prices.py` calls the live Tankerkönig API
+   every few minutes (via an external scheduler) and appends to `data/log/`.
+   This is the primary, continuously growing dataset.
+2. **Historical import** — `src2/extract.py` pulls rows out of a local clone
+   of the public [tankerkoenig-data](https://github.com/tankerkoenig/tankerkoenig-data)
+   repo (community-donated dumps) into `data/import/`, for stretches of
+   history that predate or gap the live polling.
+
+The `src2/visualize_*.py` scripts chart daily/intraday price patterns from
+whichever of the two you point them at, to spot good refueling windows.
 
 ## Project Structure
 
 ```
 Tankpreise/
-├── src2/                        # Active source code
-│   ├── extract.py                        # Pull one station's rows out of the cloned dataset
-│   ├── visualize_myData.py               # Single-fuel chart, ~14 days, intraday detail
+├── src2/                        # All active source code
+│   ├── stations.py                       # Shared station-name -> Tankerkönig UUID registry
+│   ├── extract.py                        # Historical import: pull one station's rows out of the cloned dataset
+│   ├── record_prices.py                  # ACTIVE: scheduled live poller, writes data/log/
+│   ├── visualize_myData.py               # Single-fuel chart, ~14 days, intraday detail (reads data/log/)
 │   ├── visualize_myData_longterm.py      # Same, but a long window (148 days), thinned labels
-│   └── visualise_tankerData_fuel_type.py # Chart a single dated raw extract, fuel type via CLI arg
+│   └── visualise_tankerData_fuel_type.py # Chart a single dated data/import/ extract, fuel type via CLI arg
 │
 ├── data/
-│   ├── raw/                   # Per-station extracts from extract.py (gitignored, .gitkeep only)
-│   ├── processed/             # Consolidated per-fuel CSVs consumed by visualize_myData*.py (gitignored)
+│   ├── import/                # Per-station historical extracts from extract.py (gitignored, .gitkeep only)
+│   ├── log/                   # Live per-fuel price log from record_prices.py (gitignored)
 │   └── archive/               # Old/test data files (gitignored)
 │
 ├── scripts/                    # Windows batch helpers
@@ -28,58 +37,61 @@ Tankpreise/
 │
 ├── output/                     # Generated charts (gitignored)
 │
-├── legacy/                     # Superseded development iterations, kept for reference
-│   ├── src/, visualizations/  # Earlier versions of the extract/visualize scripts
-│   └── utilities/             # Includes two standalone live-polling scripts that call the
-│                               # Tankerkönig API directly (see "Live polling" below)
-│
-├── docs/
-│   └── projectstructure.md    # Older structure writeup — describes a previous src/ layout,
-│                               # now stale; see this README instead
-│
 └── pyproject.toml              # Project metadata & dependencies (pandas, matplotlib)
 ```
+
+There used to be a `legacy/` folder full of superseded development iterations
+and a stale `docs/projectstructure.md`; both have been removed now that this
+README is accurate and `record_prices.py` (formerly buried in
+`legacy/utilities/gas_price_datetime.py`) has been promoted into `src2/`
+alongside the rest of the active code.
 
 ## Setup
 
 - Python ≥ 3.10 (`.venv/` in this repo, dependencies declared in `pyproject.toml`).
-- Clone `tankerkoenig-data` as a **sibling** of this repo (the scripts reference it via
+- `TANKERKOENIG_API_KEY` **is required** — `record_prices.py` reads it via
+  `os.environ.get('TANKERKOENIG_API_KEY')` on every scheduled run. Set it as a
+  persistent user environment variable (e.g. `setx TANKERKOENIG_API_KEY "..."`
+  on Windows) so it survives outside whichever terminal set it, since the
+  poller runs unattended on a schedule.
+- For the historical import path only: clone `tankerkoenig-data` as a
+  **sibling** of this repo (`extract.py` references it via
   `../../tankerkoenig-data`), then keep it updated with `scripts/repo_clone.bat`
   (edit the hardcoded path inside first) or a plain `git pull`.
-- `TANKERKOENIG_API_KEY` is **only** needed for the legacy live-polling scripts
-  (see below) — the current `src2/` pipeline reads from the cloned dataset and
-  doesn't call the live API, so it needs no key.
+- ⚠️ If you're reading this after the `legacy/utilities/gas_price_datetime.py`
+  → `src2/record_prices.py` move: update the scheduled task's command line to
+  point at the new path, or the live log will silently stop growing.
 
 ## Workflow
 
-### 1. Update the data source
-```bash
-cd ../tankerkoenig-data
-git pull
-```
-or run `scripts/repo_clone.bat`.
+### Live price log (`data/log/`)
+`record_prices.py` is run on a recurring schedule (external to this repo —
+e.g. Windows Task Scheduler) roughly every few minutes. Each run:
+- fetches all stations in `stations.STATIONS` in one API call,
+- appends one row per open station/fuel to `data/log/{diesel,e5,e10}_prices_*.csv`
+  (semicolon-separated, columns `date;station;<fuel>`).
 
-### 2. Extract station data
+No manual step needed as long as the scheduled job keeps running and the API
+key stays set.
+
+### Historical import (`data/import/`)
 ```bash
+cd ../tankerkoenig-data && git pull        # or scripts/repo_clone.bat
 cd src2
 python extract.py
 ```
-Edit `STATION_NAME` (and `MONTHS_TO_PROCESS`) at the top of the file to pick the
-station and lookback window. Outputs a comma-separated CSV to `data/raw/`.
+Edit `STATION_NAME` (and `MONTHS_TO_PROCESS`) at the top of `extract.py` to
+pick the station and lookback window. Outputs a comma-separated,
+Tankerkönig-shaped CSV to `data/import/<date>_<station>.csv` — used to fill in
+history the live poller didn't capture, or via
+`visualise_tankerData_fuel_type.py` for a one-off look at a single day.
 
-### 3. Consolidate into `data/processed/` (manual step, no script yet)
-`visualize_myData.py` / `visualize_myData_longterm.py` expect semicolon-separated
-files at `data/processed/{diesel,e5,e10}_prices_*.csv` with columns
-`date;<fuel>;station`. There's currently no committed script that builds these
-from the `data/raw/` extracts — they've been assembled by hand so far. This is
-the main gap in the pipeline (see Known Gaps below).
-
-### 4. Visualize
+### Visualize
 ```bash
 cd src2
 python visualize_myData.py              # last SHOW_DAYS (default 14), one fuel/station, intraday detail
 python visualize_myData_longterm.py     # long window (default 148 days), thinned x-axis
-python visualise_tankerData_fuel_type.py [diesel|e5|e10]   # one dated data/raw/ file, single day snapshot
+python visualise_tankerData_fuel_type.py [diesel|e5|e10]   # one dated data/import/ file, single day snapshot
 ```
 Fuel type, station, and date range are set as constants near the top of each
 file (`FUEL_TYPE`, `STATION`, `SHOW_DAYS`, `Gasstation`, `Datum`, ...).
@@ -92,36 +104,24 @@ file (`FUEL_TYPE`, `STATION`, `SHOW_DAYS`, `Gasstation`, `Datum`, ...).
 - **Stable-minimum detection**: alongside the absolute daily low, finds the
   cheapest price that held for ≥30 minutes — more actionable than a price that
   flashed by for a minute.
-- **Multi-station support**: `data/processed/` CSVs carry a `station` column so
+- **Multi-station support**: `data/log/` CSVs carry a `station` column so
   several stations' history can live in the same file.
 - **Missing-day indicators**: days with no data are marked with gray ✕ markers
   instead of silently disappearing from the x-axis.
 
-## Live polling (legacy, needs `TANKERKOENIG_API_KEY`)
-
-`legacy/utilities/gas_price.py` and `gas_price_datetime.py` poll the live
-Tankerkönig API directly (`creativecommons.tankerkoenig.de/json/prices.php`)
-and append the current price to a CSV — this is where `TANKERKOENIG_API_KEY`
-is actually read (`os.environ.get('TANKERKOENIG_API_KEY')`). These aren't part
-of the current `src2/` pipeline; they'd need to be run on a schedule (e.g. a
-Task Scheduler job) to build up history independently of the
-`tankerkoenig-data` repo.
-
 ## Known Gaps / TODO
 
-- No script to turn `data/raw/` extracts into the `data/processed/` files the
-  visualizers expect — currently a manual step.
-- The `STATIONS` UUID dict is duplicated between `extract.py` and
-  `visualise_tankerData_fuel_type.py`; worth factoring out.
-- `visualise_tankerData_fuel_type.py`'s `STATIONS["Orlen_Wentorf"]` UUID has
-  stray characters (`0050´ßoicxäiuzt56ba-...`) — looks like an accidental edit,
-  not a real UUID.
-- `docs/projectstructure.md` describes an older `src/` layout and is stale;
-  either update it to match `src2/` or remove it in favor of this README.
+- The scheduled task that runs `record_prices.py` isn't tracked anywhere in
+  this repo (no exported Task Scheduler XML, no documented interval) — if the
+  machine is rebuilt, that scheduling has to be recreated from memory.
+- `scripts/repo_clone.bat` and `scripts/file_clone.bat` still hardcode
+  machine-specific absolute paths to the `tankerkoenig-data` clone — edit
+  those before running on another machine.
 
 ## Dependencies
 
 - pandas
 - matplotlib
+- requests (used by `record_prices.py` to call the live Tankerkönig API)
 
 (see `pyproject.toml` for pinned minimum versions)

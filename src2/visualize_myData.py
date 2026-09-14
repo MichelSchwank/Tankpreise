@@ -49,9 +49,9 @@ STATION = "Tanke_Lud"  # Which station's rows to pick out of the shared CSV file
 # File paths
 SCRIPT_DIR = Path(__file__).parent
 _FUEL_FILES = {
-    "diesel": SCRIPT_DIR / '../data/processed/diesel_prices_3.csv',
-    "e5":     SCRIPT_DIR / '../data/processed/e5_prices_1.csv',
-    "e10":    SCRIPT_DIR / '../data/processed/e10_prices_1.csv',
+    "diesel": SCRIPT_DIR / '../data/log/diesel_prices_3.csv',
+    "e5":     SCRIPT_DIR / '../data/log/e5_prices_1.csv',
+    "e10":    SCRIPT_DIR / '../data/log/e10_prices_1.csv',
 }
 DATA_FILE = _FUEL_FILES[FUEL_TYPE]
 SEPARATOR = ';'# CSV parsing
@@ -801,7 +801,7 @@ def main() -> None:
     - Error messages (if any issues occur)
 
     Example Console Output:
-        Loading fuel price data from: ../data/processed/diesel_prices_3.csv
+        Loading fuel price data from: ../data/log/diesel_prices_3.csv
         Analyzing last 7 days...
         Stable minimum threshold: 30 minutes
 

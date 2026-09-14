@@ -41,10 +41,10 @@ Thumbs.db
 output/*.png
 output/*.pdf
 output/*.jpg
-data/raw/*.csv
-data/processed/*.csv
-!data/raw/.gitkeep
-!data/processed/.gitkeep
+data/import/*.csv
+data/log/*.csv
+!data/import/.gitkeep
+!data/log/.gitkeep
 !data/archive/.gitkeep
 
 # Jupyter

@@ -1,11 +1,21 @@
+"""
+Live price poller (ACTIVE).
+
+Meant to be run on a recurring schedule (e.g. Windows Task Scheduler) every
+few (e.g. 30) minutes. Each run fetches the current price for every station in
+STATIONS and appends one row per open station/fuel to data/log/.
+
+NOTE: if you're moving this script (as part of a repo reorg, say), remember
+to update the scheduled task's command line to point at the new path.
+"""
+
 import datetime
 import os
-import time
 import requests
 import pandas as pd
 from pathlib import Path
-import sys
 
+from stations import STATIONS
 
 
 API_KEY = os.environ.get('TANKERKOENIG_API_KEY')
@@ -15,17 +25,6 @@ if not API_KEY:
         "this script, e.g. (PowerShell): $env:TANKERKOENIG_API_KEY = 'your-key-here'"
     )
 
-# Gas station UUIDs to record prices for
-STATIONS = {
-    "Tanke_Lud": "916d61b6-7279-4d63-a754-ae160f8cdee2",
-    "Tanke_Steinf": "291fafe3-dbfb-4452-8c68-aa6a7540ce98",
-    "Wentorf_Hem": "e1a15081-2543-9107-e040-0b0a3dfe563c",
-    "MrWash": "21d8e11f-5712-4d00-81aa-100887b65699",
-    "EDEKA_Wentorf": "2f432c0c-9052-466d-9030-c78ab8c4149d",
-    "München": "fb79c457-543a-4ff6-ba70-cd270ac2110a",
-    "Orlen_Wentorf": "005056ba-7cb6-1ed2-bceb-bbb7e74e0d4e",
-}
-
 # Tankerkoenig's prices.php accepts at most 10 comma-separated ids per request
 if len(STATIONS) > 10:
     raise RuntimeError("Too many stations for a single prices.php request (max 10)")
@@ -33,9 +32,10 @@ if len(STATIONS) > 10:
 # Default station a legacy caller gets if it still asks for a single id
 STATION_ID = STATIONS["Tanke_Lud"]
 
-DIESEL_FILE = r"C:\Users\miche\OneDrive\Dokumente\3. Privat\VSC_Projects\Tankpreise\data\processed\diesel_prices_3.csv"
-E5_FILE = r"C:\Users\miche\OneDrive\Dokumente\3. Privat\VSC_Projects\Tankpreise\data\processed\e5_prices_1.csv"
-E10_FILE = r"C:\Users\miche\OneDrive\Dokumente\3. Privat\VSC_Projects\Tankpreise\data\processed\e10_prices_1.csv"
+SCRIPT_DIR = Path(__file__).parent
+DIESEL_FILE = SCRIPT_DIR / '../data/log/diesel_prices_3.csv'
+E5_FILE = SCRIPT_DIR / '../data/log/e5_prices_1.csv'
+E10_FILE = SCRIPT_DIR / '../data/log/e10_prices_1.csv'
 
 # Station that historic rows (recorded before multi-station support) belong to
 LEGACY_STATION = "Tanke_Lud"
@@ -82,10 +82,13 @@ def fetch_current_prices():
 
 
 def append_to_csv(filepath, timestamp, station, column, price):
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+
     formatted_time = timestamp.strftime("%Y-%m-%d %H:%M:%S")
     new_row = pd.DataFrame([[formatted_time, station, price]], columns=['date', 'station', column])
 
-    if Path(filepath).exists():
+    if filepath.exists():
         df = pd.read_csv(filepath, sep=';', parse_dates=['date'])
         if 'station' not in df.columns:
             # Backfill rows written before multi-station support existed
@@ -117,7 +120,5 @@ def record_prices_to_csv():
             append_to_csv(E10_FILE, t, name, 'e10', e10)
 
 
-record_prices_to_csv()
-
-
-sys.exit(0)
+if __name__ == '__main__':
+    record_prices_to_csv()
